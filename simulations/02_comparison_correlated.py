@@ -17,7 +17,28 @@ from treeinterpreter.feature_importance import MDA
 # # Compare different methods in terms of feature selection using simulated data
 debiased_list, gini_list, shap_list, mda_list = [], [], [], []
 
-for i in range(20):
+def sigmoid(x):
+    x *= 1
+    return np.exp(x) / (np.exp(x) + np.exp(-x))
+def permute(X, noisy_features):
+    tmp = X.copy()
+    for j in range(X.shape[1]):
+        if noisy_features[j] == 1:
+            tmp[:, j] = np.random.permutation(sp.stats.rankdata(tmp[:, j]))
+            maximum = max(tmp[:, j])
+            tmp[:, j] = tmp[:, j] / maximum - .5
+    return tmp
+def rankdata(X):
+    tmp = X.copy()
+    for j in range(X.shape[1]):
+        #tmp[:, j] = np.random.permutation(sp.stats.rankdata(tmp[:, j]))
+        maximum = max(tmp[:, j])
+        tmp[:, j] = tmp[:, j] / maximum - .5
+    return tmp
+def f(X, noisy_features):
+    probs = sigmoid(np.mean(X[:, noisy_features == 0], 1) )
+    return np.array([np.random.choice([0, 1], 1, p=[1 - prob, prob]) for prob in probs]).flatten()
+for i in range(40):
     # ### load data
     X_train = np.loadtxt('../intermediate/02_enhancer/X_train.csv', delimiter=',')
     y_train = np.loadtxt('../intermediate/02_enhancer/y_train.csv', delimiter=',')
@@ -26,38 +47,18 @@ for i in range(20):
     n, m = X_train.shape
     names = np.arange(m)
 
-    def sigmoid(x):
-        x *= 1
-        return np.exp(x) / (np.exp(x) + np.exp(-x))
-    def permute(X):
-        tmp = X.copy()
-        for j in range(X.shape[1]):
-            tmp[:, j] = np.random.permutation(sp.stats.rankdata(tmp[:, j]))
-            maximum = max(tmp[:, j])
-            tmp[:, j] = tmp[:, j] / maximum - .5
-        return tmp
-    def rankdata(X):
-        tmp = X.copy()
-        for j in range(X.shape[1]):
-            #tmp[:, j] = np.random.permutation(sp.stats.rankdata(tmp[:, j]))
-            maximum = max(tmp[:, j])
-            tmp[:, j] = tmp[:, j] / maximum - .5
-        return tmp
-    def f(X, noisy_features):
-        probs = sigmoid(np.mean(X[:, noisy_features == 0], 1) )
-        return np.array([np.random.choice([0, 1], 1, p=[1 - prob, prob]) for prob in probs]).flatten()
 
     n_features = X_train.shape[1]
-    X_train = permute(X_train)
-    X_test = permute(X_test)
     n, m = X_train.shape
     names = np.arange(m)
     noisy_features = np.ones((n_features, ), dtype=int)
     noisy_features[np.random.choice(range(n_features), 5, replace=False)] = 0
     y_train = f(X_train, noisy_features)
     y_test = f(X_test, noisy_features)
+    X_train = permute(X_train, noisy_features)
+    X_test = permute(X_test, noisy_features)
 
-    rf = rfc(n_estimators=100, min_samples_leaf=100, max_depth=100)
+    rf = rfc(n_estimators=100, max_features = 8)
     rf.fit(X_train, y_train)
     gini_imp = rf.feature_importances_
 
@@ -82,4 +83,4 @@ for i in range(20):
     shap_list.append(roc_auc_score(noisy_features, - shap_imp))
     mda_list.append(roc_auc_score(noisy_features, - MDA_imp))
 
-np.savez('../intermediate/02_simulation_results_min_node_size_100.npz', debiased_list = debiased_list, gini_list=gini_list, shap_list=shap_list, mda_list=mda_list)
+np.savez('../intermediate/02_simulation_results_correlated_features_max_feature_8.npz', debiased_list = debiased_list, gini_list=gini_list, shap_list=shap_list, mda_list=mda_list)
